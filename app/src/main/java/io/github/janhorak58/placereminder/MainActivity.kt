@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +42,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Every screen puts a navy band under the status bar, so keep its icons light.
+        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         if (savedInstanceState == null) {
             openReminderId = intent.getLongExtra(EXTRA_REMINDER_ID, -1L)
             // App start: re-register all geofences.
@@ -78,10 +80,17 @@ private fun App(resumeTick: Int, openReminderId: Long, onOpenHandled: () -> Unit
 
     var screen by rememberSaveable { mutableStateOf(if (status.fineLocation) Screen.LIST else Screen.SETUP) }
     var editId by rememberSaveable { mutableLongStateOf(0L) }
+    // Bumped on every open so the editor gets a fresh ViewModel. Keying by editId alone reused
+    // the previous form, e.g. every "new" reminder shares id 0.
+    var editSession by rememberSaveable { mutableIntStateOf(0) }
+    fun openEditor(id: Long) {
+        editId = id
+        editSession++
+        screen = Screen.EDITOR
+    }
 
     if (openReminderId >= 0) {
-        editId = openReminderId
-        screen = Screen.EDITOR
+        openEditor(openReminderId)
         onOpenHandled()
     }
 
@@ -90,14 +99,14 @@ private fun App(resumeTick: Int, openReminderId: Long, onOpenHandled: () -> Unit
             val vm: ListViewModel = viewModel()
             ListScreen(
                 vm, status,
-                onAdd = { editId = 0L; screen = Screen.EDITOR },
-                onEdit = { editId = it; screen = Screen.EDITOR },
+                onAdd = { openEditor(0L) },
+                onEdit = { openEditor(it) },
                 onSetup = { screen = Screen.SETUP },
             )
         }
         Screen.EDITOR -> {
             val app = context.applicationContext as Application
-            val vm: EditorViewModel = viewModel(key = "editor-$editId", factory = viewModelFactory {
+            val vm: EditorViewModel = viewModel(key = "editor-$editSession", factory = viewModelFactory {
                 initializer { EditorViewModel(app, editId) }
             })
             EditorScreen(vm) { screen = Screen.LIST }

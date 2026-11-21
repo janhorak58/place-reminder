@@ -1,6 +1,11 @@
 <resources>
-    <style name="Theme.PlaceReminder" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+    <!-- DayNight so the system knows the app handles dark mode itself. A light-only parent lets
+         OEM "dark mode for apps" recolor the Compose UI, which left input text barely visible. -->
+    <style name="Theme.PlaceReminder" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

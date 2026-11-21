@@ -3,6 +3,8 @@ package io.github.janhorak58.placereminder.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import androidx.core.content.ContextCompat
+import io.github.janhorak58.placereminder.R
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -108,11 +110,13 @@ fun LocationMap(
             view.overlays.clear()
             view.overlays.addAll(keep)
             if (point != null) {
-                if (headsUpMeters != null) view.overlays.add(circle(view, point, headsUpMeters, Color.rgb(230, 126, 34)))
-                if (radiusMeters != null) view.overlays.add(circle(view, point, radiusMeters, Color.rgb(46, 107, 94)))
+                if (headsUpMeters != null) addRing(view, point, headsUpMeters, RING_BLUE, 38)
+                if (radiusMeters != null) addRing(view, point, radiusMeters, AMBER, 55)
+                val pin = ContextCompat.getDrawable(view.context, R.drawable.ic_map_pin)
                 view.overlays.add(
                     Marker(view).apply {
                         position = point
+                        if (pin != null) icon = pin
                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                         setInfoWindow(null)
                     },
@@ -123,10 +127,29 @@ fun LocationMap(
     )
 }
 
-private fun circle(view: MapView, center: GeoPoint, radius: Int, color: Int) = Polygon(view).apply {
-    points = Polygon.pointsAsCircle(center, radius.toDouble())
-    fillPaint.color = Color.argb(45, Color.red(color), Color.green(color), Color.blue(color))
-    outlinePaint.color = color
-    outlinePaint.strokeWidth = 4f
-    setInfoWindow(null)
+private val AMBER = Color.rgb(255, 184, 0)
+private val RING_BLUE = Color.rgb(95, 179, 217)
+private val INK = Color.rgb(14, 34, 51)
+
+/** Ring in the brand colour. A thin navy casing underneath keeps it readable on pale map tiles. */
+private fun addRing(view: MapView, center: GeoPoint, radius: Int, color: Int, fillAlpha: Int) {
+    val pts = Polygon.pointsAsCircle(center, radius.toDouble())
+    view.overlays.add(
+        Polygon(view).apply {
+            points = pts
+            fillPaint.color = Color.TRANSPARENT
+            outlinePaint.color = Color.argb(150, Color.red(INK), Color.green(INK), Color.blue(INK))
+            outlinePaint.strokeWidth = 10f
+            setInfoWindow(null)
+        },
+    )
+    view.overlays.add(
+        Polygon(view).apply {
+            points = pts
+            fillPaint.color = Color.argb(fillAlpha, Color.red(color), Color.green(color), Color.blue(color))
+            outlinePaint.color = color
+            outlinePaint.strokeWidth = 6f
+            setInfoWindow(null)
+        },
+    )
 }

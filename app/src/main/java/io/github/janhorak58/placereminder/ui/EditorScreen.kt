@@ -9,7 +9,23 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,137 +113,198 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
     fun errorFor(f: Validation.Field) = error?.takeIf { it.field == f }?.message
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Reminder") },
-                navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-                actions = { TextButton(onClick = { vm.save(onClose) }) { Text("Save") } },
-            )
+        modifier = Modifier.imePadding(),
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 8.dp) {
+                Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (error != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                            Text(error.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    Button(
+                        onClick = { vm.save(onClose) },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Ink),
+                    ) { Text("Save reminder", style = MaterialTheme.typography.labelLarge) }
+                }
+            }
         },
     ) { padding ->
-        if (!vm.loaded) return@Scaffold
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedTextField(
-                value = vm.name, onValueChange = { vm.name = it }, label = { Text("Name") },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-                isError = errorFor(Validation.Field.NAME) != null,
-                supportingText = errorFor(Validation.Field.NAME)?.let { { Text(it) } },
-            )
-            OutlinedTextField(
-                value = vm.message, onValueChange = { vm.message = it }, label = { Text("Message") },
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Section("Place")
-            LocationMap(
-                modifier = Modifier.fillMaxWidth().height(280.dp),
-                point = if (vm.hasLocation) GeoPoint(vm.latitude!!, vm.longitude!!) else null,
-                radiusMeters = vm.radiusMeters?.takeIf { it > 0 },
-                headsUpMeters = if (vm.headsUp && vm.trigger != Trigger.EXIT) vm.headsUpMeters?.takeIf { it > 0 } else null,
-                fitKey = vm.fitTick,
-                startCenter = startCenter,
-                onPick = { vm.setLocation(it.latitude, it.longitude) },
-            )
-            Text(
-                errorFor(Validation.Field.LOCATION) ?: "Tap or long-press the map to place the pin.",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (errorFor(Validation.Field.LOCATION) != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(onClick = { if (hasFine()) useCurrentLocation() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION) }) {
-                Icon(Icons.Filled.LocationOn, contentDescription = null)
-                Text("Use current location", modifier = Modifier.padding(start = 8.dp))
-            }
-
-            Section("Radius")
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = vm.radiusText, onValueChange = { vm.radiusText = it; vm.requestFit() },
-                    label = { Text("Radius") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.weight(1f),
-                    isError = errorFor(Validation.Field.RADIUS) != null,
-                    supportingText = errorFor(Validation.Field.RADIUS)?.let { { Text(it) } },
-                )
-                SingleChoiceSegmentedButtonRow(Modifier.padding(top = 8.dp)) {
-                    SegmentedButton(selected = !vm.radiusInKm, onClick = { vm.setRadiusUnit(false) }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("m") }
-                    SegmentedButton(selected = vm.radiusInKm, onClick = { vm.setRadiusUnit(true) }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("km") }
-                }
-            }
-            Slider(
-                value = vm.sliderPosition(),
-                onValueChange = { vm.setRadiusMeters(RadiusScale.toMeters(it)) },
-                onValueChangeFinished = { vm.requestFit() },
-            )
-            val radius = vm.radiusMeters
-            if (radius != null && radius < Limits.UNRELIABLE_BELOW_M) {
-                Text("Below 100 m, alerts can be unreliable", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-
-            Section("When")
-            Segmented(
-                listOf(Trigger.ENTER to "Enter", Trigger.EXIT to "Exit", Trigger.DWELL to "Stay"),
-                vm.trigger,
-            ) { vm.trigger = it }
-            if (vm.trigger == Trigger.DWELL) {
-                OutlinedTextField(
-                    value = vm.dwellText, onValueChange = { vm.dwellText = it }, label = { Text("Stay for (minutes)") },
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = errorFor(Validation.Field.DWELL) != null,
-                    supportingText = errorFor(Validation.Field.DWELL)?.let { { Text(it) } },
-                )
-            }
-
-            Section("Frequency")
-            Segmented(listOf(Frequency.ONE_TIME to "One-time", Frequency.RECURRING to "Recurring"), vm.frequency) { vm.frequency = it }
-
-            Section("Alert level")
-            Segmented(listOf(Level.SILENT to "Silent", Level.NORMAL to "Normal", Level.ALARM to "Alarm"), vm.level) { vm.level = it }
-
-            if (vm.trigger != Trigger.EXIT) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = vm.headsUp, onCheckedChange = { vm.toggleHeadsUp(it) })
-                    Text("Remind me before I arrive")
-                }
-                Text(
-                    "Use heads-up for an early warning while driving.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (vm.headsUp) {
-                    OutlinedTextField(
-                        value = vm.headsUpKmText, onValueChange = { vm.headsUpKmText = it; vm.requestFit() },
-                        label = { Text("Warn me at (km)") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = errorFor(Validation.Field.HEADS_UP) != null,
-                        supportingText = errorFor(Validation.Field.HEADS_UP)?.let { { Text(it) } },
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            InkHeader {
+                Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Brand.Paper)
+                    }
+                    Text(
+                        if (vm.isNew) "New reminder" else "Edit reminder",
+                        style = MaterialTheme.typography.headlineSmall, color = Brand.Paper,
+                        modifier = Modifier.padding(start = 4.dp),
                     )
                 }
             }
+            if (!vm.loaded) return@Column
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.fillMaxWidth().height(340.dp).clip(MaterialTheme.shapes.extraLarge)) {
+                        LocationMap(
+                            modifier = Modifier.fillMaxSize(),
+                            point = if (vm.hasLocation) GeoPoint(vm.latitude!!, vm.longitude!!) else null,
+                            radiusMeters = vm.radiusMeters?.takeIf { it > 0 },
+                            headsUpMeters = if (vm.headsUp && vm.trigger != Trigger.EXIT) vm.headsUpMeters?.takeIf { it > 0 } else null,
+                            fitKey = vm.fitTick,
+                            startCenter = startCenter,
+                            onPick = { vm.setLocation(it.latitude, it.longitude) },
+                        )
+                        Button(
+                            onClick = { if (hasFine()) useCurrentLocation() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Brand.Ink, contentColor = Brand.Paper),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
+                        ) {
+                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = Brand.Amber, modifier = Modifier.size(18.dp))
+                            Text("Use my location", modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                    val locationError = errorFor(Validation.Field.LOCATION)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(horizontal = 6.dp)) {
+                        if (locationError != null) Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Text(
+                            locationError ?: "Tap or long-press the map to place the pin.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (locationError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
 
-            Button(onClick = { vm.save(onClose) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Save") }
-        }
-    }
-}
+                SectionCard("What to remember") {
+                    OutlinedTextField(
+                        value = vm.name, onValueChange = { vm.name = it }, label = { Text("Name") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(), colors = fieldColors(), shape = MaterialTheme.shapes.medium,
+                        isError = errorFor(Validation.Field.NAME) != null,
+                        supportingText = errorFor(Validation.Field.NAME)?.let { { Text(it) } },
+                    )
+                    OutlinedTextField(
+                        value = vm.message, onValueChange = { vm.message = it }, label = { Text("Message") },
+                        modifier = Modifier.fillMaxWidth(), colors = fieldColors(), shape = MaterialTheme.shapes.medium,
+                    )
+                }
 
-@Composable
-private fun Section(title: String) {
-    Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
-}
+                SectionCard("Radius", hint = "How close you need to be for the reminder to fire.") {
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = vm.radiusText, onValueChange = { vm.radiusText = it; vm.requestFit() },
+                            label = { Text("Radius") }, singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.weight(1f), colors = fieldColors(), shape = MaterialTheme.shapes.medium,
+                            isError = errorFor(Validation.Field.RADIUS) != null,
+                            supportingText = errorFor(Validation.Field.RADIUS)?.let { { Text(it) } },
+                        )
+                        val segColors = SegmentedButtonDefaults.colors(
+                            activeContainerColor = MaterialTheme.colorScheme.primary,
+                            activeContentColor = MaterialTheme.colorScheme.onPrimary,
+                            activeBorderColor = MaterialTheme.colorScheme.primary,
+                            inactiveContainerColor = MaterialTheme.colorScheme.surface,
+                            inactiveContentColor = MaterialTheme.colorScheme.onSurface,
+                            inactiveBorderColor = MaterialTheme.colorScheme.outline,
+                        )
+                        SingleChoiceSegmentedButtonRow(Modifier.padding(top = 8.dp)) {
+                            SegmentedButton(selected = !vm.radiusInKm, onClick = { vm.setRadiusUnit(false) }, shape = SegmentedButtonDefaults.itemShape(0, 2), colors = segColors) { Text("m") }
+                            SegmentedButton(selected = vm.radiusInKm, onClick = { vm.setRadiusUnit(true) }, shape = SegmentedButtonDefaults.itemShape(1, 2), colors = segColors) { Text("km") }
+                        }
+                    }
+                    Slider(
+                        value = vm.sliderPosition(),
+                        onValueChange = { vm.setRadiusMeters(RadiusScale.toMeters(it)) },
+                        onValueChangeFinished = { vm.requestFit() },
+                        colors = SliderDefaults.colors(
+                            thumbColor = Brand.Amber, activeTrackColor = Brand.Amber,
+                            inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ),
+                    )
+                    val radius = vm.radiusMeters
+                    if (radius != null && radius < Limits.UNRELIABLE_BELOW_M) {
+                        Text("Below 100 m, alerts can be unreliable", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
 
-@Composable
-private fun <T> Segmented(options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        options.forEachIndexed { i, (value, label) ->
-            SegmentedButton(
-                selected = value == selected, onClick = { onSelect(value) },
-                shape = SegmentedButtonDefaults.itemShape(i, options.size),
-            ) { Text(label) }
+                SectionCard("Fires when you") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OptionTile(vm.trigger == Trigger.ENTER, { vm.trigger = Trigger.ENTER }, GlyphKind.ARRIVE, "Arrive", Modifier.weight(1f))
+                        OptionTile(vm.trigger == Trigger.EXIT, { vm.trigger = Trigger.EXIT }, GlyphKind.LEAVE, "Leave", Modifier.weight(1f))
+                        OptionTile(vm.trigger == Trigger.DWELL, { vm.trigger = Trigger.DWELL }, GlyphKind.STAY, "Stay", Modifier.weight(1f))
+                    }
+                    Text(
+                        when (vm.trigger) {
+                            Trigger.ENTER -> "Fires as soon as you get inside the radius."
+                            Trigger.EXIT -> "Fires when you leave the radius."
+                            Trigger.DWELL -> "Fires after you stay inside the radius for a set time."
+                        },
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (vm.trigger == Trigger.DWELL) {
+                        OutlinedTextField(
+                            value = vm.dwellText, onValueChange = { vm.dwellText = it }, label = { Text("Stay for (minutes)") },
+                            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(), colors = fieldColors(), shape = MaterialTheme.shapes.medium,
+                            isError = errorFor(Validation.Field.DWELL) != null,
+                            supportingText = errorFor(Validation.Field.DWELL)?.let { { Text(it) } },
+                        )
+                    }
+                }
+
+                SectionCard("How often") {
+                    OptionRow(vm.frequency == Frequency.ONE_TIME, { vm.frequency = Frequency.ONE_TIME }, GlyphKind.ONCE, "Once", "Turns itself off after it fires.")
+                    OptionRow(vm.frequency == Frequency.RECURRING, { vm.frequency = Frequency.RECURRING }, GlyphKind.REPEAT, "Every time", "Fires again each time it happens.")
+                }
+
+                SectionCard("Alert level") {
+                    OptionRow(vm.level == Level.SILENT, { vm.level = Level.SILENT }, GlyphKind.SILENT, "Silent", "No sound, shows in your notifications.")
+                    OptionRow(vm.level == Level.NORMAL, { vm.level = Level.NORMAL }, GlyphKind.NORMAL, "Normal", "Notification with your usual sound.")
+                    OptionRow(vm.level == Level.ALARM, { vm.level = Level.ALARM }, GlyphKind.ALARM, "Alarm", "Rings over the lockscreen until dismissed.")
+                }
+
+                if (vm.trigger != Trigger.EXIT) {
+                    SectionCard("Early warning") {
+                        Row(
+                            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium).clickable { vm.toggleHeadsUp(!vm.headsUp) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = vm.headsUp, onCheckedChange = { vm.toggleHeadsUp(it) },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = MaterialTheme.colorScheme.primary, checkmarkColor = MaterialTheme.colorScheme.onPrimary,
+                                    uncheckedColor = MaterialTheme.colorScheme.outline,
+                                ),
+                            )
+                            Column(Modifier.padding(start = 4.dp)) {
+                                Text("Remind me before I arrive", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    "A second, wider ring gives you an early warning while driving.",
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (vm.headsUp) {
+                            OutlinedTextField(
+                                value = vm.headsUpKmText, onValueChange = { vm.headsUpKmText = it; vm.requestFit() },
+                                label = { Text("Warn me at (km)") }, singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth(), colors = fieldColors(), shape = MaterialTheme.shapes.medium,
+                                isError = errorFor(Validation.Field.HEADS_UP) != null,
+                                supportingText = errorFor(Validation.Field.HEADS_UP)?.let { { Text(it) } },
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

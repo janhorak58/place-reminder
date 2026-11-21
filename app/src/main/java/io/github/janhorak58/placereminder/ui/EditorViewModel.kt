@@ -27,6 +27,8 @@ class EditorViewModel(app: Application, private val reminderId: Long) : AndroidV
     private val dao = AppDatabase.get(app).reminderDao()
     private var original: Reminder? = null
 
+    val isNew get() = reminderId == 0L
+
     var loaded by mutableStateOf(reminderId == 0L)
         private set
 
