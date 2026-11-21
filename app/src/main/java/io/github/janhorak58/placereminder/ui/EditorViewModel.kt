@@ -1,0 +1,157 @@
+package io.github.janhorak58.placereminder.ui
+
+import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.janhorak58.placereminder.data.AppDatabase
+import io.github.janhorak58.placereminder.data.Frequency
+import io.github.janhorak58.placereminder.data.GeofenceBudget
+import io.github.janhorak58.placereminder.data.Level
+import io.github.janhorak58.placereminder.data.Limits
+import io.github.janhorak58.placereminder.data.RadiusScale
+import io.github.janhorak58.placereminder.data.Reminder
+import io.github.janhorak58.placereminder.data.Trigger
+import io.github.janhorak58.placereminder.data.Validation
+import io.github.janhorak58.placereminder.geofence.GeofenceManager
+import kotlinx.coroutines.launch
+import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.roundToInt
+
+/** Editor form state. [reminderId] 0 creates a new reminder. */
+class EditorViewModel(app: Application, private val reminderId: Long) : AndroidViewModel(app) {
+    private val dao = AppDatabase.get(app).reminderDao()
+    private var original: Reminder? = null
+
+    var loaded by mutableStateOf(reminderId == 0L)
+        private set
+
+    var name by mutableStateOf("")
+    var message by mutableStateOf("")
+    var latitude by mutableStateOf<Double?>(null)
+    var longitude by mutableStateOf<Double?>(null)
+    var radiusText by mutableStateOf(Limits.DEFAULT_RADIUS_M.toString())
+    var radiusInKm by mutableStateOf(false)
+    var trigger by mutableStateOf(Trigger.ENTER)
+    var dwellText by mutableStateOf(Limits.DEFAULT_DWELL_MIN.toString())
+    var frequency by mutableStateOf(Frequency.ONE_TIME)
+    var level by mutableStateOf(Level.NORMAL)
+    var headsUp by mutableStateOf(false)
+    var headsUpKmText by mutableStateOf("10")
+    var error by mutableStateOf<Validation.Error?>(null)
+
+    /** Bumped when the map should re-fit to the circles. */
+    var fitTick by mutableIntStateOf(0)
+        private set
+
+    init {
+        if (reminderId != 0L) {
+            viewModelScope.launch {
+                dao.get(reminderId)?.let { r ->
+                    original = r
+                    name = r.name
+                    message = r.message
+                    latitude = r.latitude
+                    longitude = r.longitude
+                    radiusInKm = r.radiusMeters >= 1000 && r.radiusMeters % 1000 == 0
+                    radiusText = formatRadiusText(r.radiusMeters, radiusInKm)
+                    trigger = r.trigger
+                    dwellText = r.dwellMinutes.toString()
+                    frequency = r.frequency
+                    level = r.level
+                    headsUp = r.headsUpEnabled
+                    headsUpKmText = formatPlain(r.headsUpMeters / 1000.0)
+                    fitTick++
+                }
+                loaded = true
+            }
+        }
+    }
+
+    val radiusMeters: Int? get() = parseDistance(radiusText, if (radiusInKm) 1000.0 else 1.0)
+    val headsUpMeters: Int? get() = parseDistance(headsUpKmText, 1000.0)
+    val hasLocation get() = latitude != null && longitude != null
+
+    fun setLocation(lat: Double, lon: Double) {
+        latitude = lat
+        longitude = lon
+        fitTick++
+    }
+
+    fun setRadiusMeters(m: Int) {
+        radiusText = formatRadiusText(m, radiusInKm)
+    }
+
+    fun setRadiusUnit(km: Boolean) {
+        val m = radiusMeters
+        radiusInKm = km
+        if (m != null) radiusText = formatRadiusText(m, km)
+    }
+
+    fun toggleHeadsUp(on: Boolean) {
+        headsUp = on
+        val r = radiusMeters ?: return
+        val h = headsUpMeters
+        if (on && (h == null || h <= r)) {
+            val km = ceil(r * 2 / 1000.0).coerceIn(1.0, 100.0)
+            headsUpKmText = formatPlain(km)
+        }
+    }
+
+    fun sliderPosition(): Float = RadiusScale.toPosition(radiusMeters ?: Limits.DEFAULT_RADIUS_M)
+
+    fun requestFit() {
+        fitTick++
+    }
+
+    /** Validates and stores the reminder. Calls [onDone] on success. */
+    fun save(onDone: () -> Unit) {
+        val draft = (original ?: Reminder()).copy(
+            name = name.trim(),
+            message = message.trim(),
+            latitude = latitude ?: 0.0,
+            longitude = longitude ?: 0.0,
+            radiusMeters = radiusMeters ?: -1,
+            trigger = trigger,
+            dwellMinutes = dwellText.trim().toIntOrNull() ?: -1,
+            frequency = frequency,
+            level = level,
+            headsUpEnabled = headsUp,
+            headsUpMeters = headsUpMeters ?: -1,
+        )
+        val result = Validation.validate(draft, hasLocation)
+        if (result is Validation.Error) {
+            error = result
+            return
+        }
+        error = null
+        viewModelScope.launch {
+            if (!GeofenceBudget.fits(dao.getAll(), draft)) {
+                error = Validation.Error(Validation.Field.HEADS_UP, LIMIT_MESSAGE)
+                return@launch
+            }
+            val id = if (original == null) dao.insert(draft) else draft.id.also { dao.update(draft) }
+            GeofenceManager.update(getApplication(), listOf(id))
+            onDone()
+        }
+    }
+
+    companion object {
+        fun formatRadiusText(meters: Int, km: Boolean) = if (km) formatPlain(meters / 1000.0) else meters.toString()
+
+        fun formatPlain(v: Double): String {
+            val s = String.format(Locale.US, "%.2f", v).trimEnd('0').trimEnd('.')
+            return s.ifEmpty { "0" }
+        }
+
+        fun parseDistance(text: String, factor: Double): Int? {
+            val v = text.trim().replace(',', '.').toDoubleOrNull() ?: return null
+            if (v.isNaN() || v.isInfinite() || v < 0) return null
+            return (v * factor).roundToInt()
+        }
+    }
+}
