@@ -110,8 +110,8 @@ fun LocationMap(
             view.overlays.clear()
             view.overlays.addAll(keep)
             if (point != null) {
-                if (headsUpMeters != null) addRing(view, point, headsUpMeters, RING_BLUE, 38)
-                if (radiusMeters != null) addRing(view, point, radiusMeters, AMBER, 55)
+                if (headsUpMeters != null) addRing(view, point, headsUpMeters, RING_BLUE, 30)
+                if (radiusMeters != null) addRing(view, point, radiusMeters, TINT, 50)
                 val pin = ContextCompat.getDrawable(view.context, R.drawable.ic_map_pin)
                 view.overlays.add(
                     Marker(view).apply {
@@ -127,19 +127,18 @@ fun LocationMap(
     )
 }
 
-private val AMBER = Color.rgb(255, 184, 0)
-private val RING_BLUE = Color.rgb(95, 179, 217)
-private val INK = Color.rgb(14, 34, 51)
+private val TINT = Color.rgb(255, 149, 0)
+private val RING_BLUE = Color.rgb(0, 122, 255)
 
-/** Ring in the brand colour. A thin navy casing underneath keeps it readable on pale map tiles. */
+/** Ring in the tint colour. A thin white casing underneath keeps it readable on busy map tiles. */
 private fun addRing(view: MapView, center: GeoPoint, radius: Int, color: Int, fillAlpha: Int) {
     val pts = Polygon.pointsAsCircle(center, radius.toDouble())
     view.overlays.add(
         Polygon(view).apply {
             points = pts
             fillPaint.color = Color.TRANSPARENT
-            outlinePaint.color = Color.argb(150, Color.red(INK), Color.green(INK), Color.blue(INK))
-            outlinePaint.strokeWidth = 10f
+            outlinePaint.color = Color.argb(200, 255, 255, 255)
+            outlinePaint.strokeWidth = 8f
             setInfoWindow(null)
         },
     )
@@ -148,7 +147,7 @@ private fun addRing(view: MapView, center: GeoPoint, radius: Int, color: Int, fi
             points = pts
             fillPaint.color = Color.argb(fillAlpha, Color.red(color), Color.green(color), Color.blue(color))
             outlinePaint.color = color
-            outlinePaint.strokeWidth = 6f
+            outlinePaint.strokeWidth = 4f
             setInfoWindow(null)
         },
     )

@@ -1,43 +1,32 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalFoundationApi::class)
 
 package io.github.janhorak58.placereminder.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,10 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,6 +72,15 @@ private fun statusLine(list: List<Reminder>?): String {
     return if (off == 0) "$active active" else "$active active, $off off"
 }
 
+private fun detailLine(r: Reminder, fired: Boolean): String = buildList {
+    add(triggerSummary(r))
+    add(formatDistance(r.radiusMeters))
+    add(if (r.frequency == Frequency.ONE_TIME) "Once" else "Every time")
+    add(when (r.level) { Level.SILENT -> "Silent"; Level.NORMAL -> "Normal"; Level.ALARM -> "Alarm" })
+    if (r.usesHeadsUp) add("Warns at ${formatDistance(r.headsUpMeters)}")
+    if (fired) add("Done")
+}.joinToString(" · ")
+
 @Composable
 fun ListScreen(
     vm: ListViewModel,
@@ -92,6 +90,7 @@ fun ListScreen(
     onSetup: () -> Unit,
 ) {
     val context = LocalContext.current
+    val c = ios
     val reminders by vm.reminders.collectAsState()
     val geofenceState by GeofenceManager.state.collectAsState()
     val message by vm.message.collectAsState()
@@ -103,192 +102,165 @@ fun ListScreen(
         }
     }
     val list = reminders
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-        floatingActionButton = {
-            if (!list.isNullOrEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = onAdd,
-                    containerColor = Brand.Amber,
-                    contentColor = Brand.Ink,
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("New reminder", style = MaterialTheme.typography.labelLarge) },
+    val listState = rememberLazyListState()
+    val progress = rememberBarProgress(listState, titleHeight = 56.dp)
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + NavBarHeight
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+
+    Box(Modifier.fillMaxSize().background(c.background)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = topInset, bottom = bottomInset + 24.dp),
+        ) {
+            item(key = "title") {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp)) {
+                    Text("Place Reminder", style = MaterialTheme.typography.headlineLarge, color = c.label)
+                    val line = statusLine(list)
+                    if (line.isNotEmpty()) {
+                        Text(line, style = MaterialTheme.typography.bodyMedium, color = c.secondary)
+                    }
+                }
+            }
+            if (!status.allGranted) {
+                item(key = "perm") {
+                    Banner("Reminders are limited. Missing: ${status.missing().joinToString(", ")}.", "Fix", onSetup)
+                }
+            }
+            if (geofenceState == GeofenceState.LOCATION_OFF) {
+                item(key = "location") {
+                    Banner("Location is off, so reminders cannot trigger.", "Settings") {
+                        context.startActivity(SettingsIntents.locationSettings())
+                    }
+                }
+            }
+            if (list != null && list.isEmpty()) {
+                item(key = "empty") { EmptyState(onAdd) }
+            }
+            val items = list.orEmpty()
+            itemsIndexed(items, key = { _, r -> r.id }) { index, r ->
+                ReminderCell(
+                    r,
+                    first = index == 0,
+                    last = index == items.lastIndex,
+                    onClick = { onEdit(r.id) },
+                    onToggle = { vm.setEnabled(r, it) },
+                    onDuplicate = { vm.duplicate(r) },
+                    onDelete = { vm.delete(r) },
                 )
             }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            InkHeader {
-                Row(
-                    Modifier.padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 22.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Place Reminder", style = MaterialTheme.typography.headlineLarge, color = Brand.Paper)
-                        Text(statusLine(list), style = MaterialTheme.typography.titleMedium, color = Brand.Amber)
-                    }
-                    IconButton(onClick = onSetup) {
-                        Icon(Icons.Filled.Settings, contentDescription = "Permissions and setup", tint = Brand.Paper)
-                    }
-                }
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (!status.allGranted) {
-                    item {
-                        Banner("Reminders are limited. Missing: ${status.missing().joinToString(", ")}.", "Fix", onSetup)
-                    }
-                }
-                if (geofenceState == GeofenceState.LOCATION_OFF) {
-                    item {
-                        Banner("Location is off, so reminders cannot trigger.", "Open settings") {
-                            context.startActivity(SettingsIntents.locationSettings())
-                        }
-                    }
-                }
-                if (list != null && list.isEmpty()) {
-                    item { EmptyState(onAdd) }
-                }
-                items(list.orEmpty(), key = { it.id }) { r ->
-                    ReminderCard(
-                        r,
-                        onClick = { onEdit(r.id) },
-                        onToggle = { vm.setEnabled(r, it) },
-                        onDuplicate = { vm.duplicate(r) },
-                        onDelete = { vm.delete(r) },
+            if (items.isNotEmpty()) {
+                item(key = "hint") {
+                    Text(
+                        "Touch and hold a reminder to edit, duplicate or delete it.",
+                        style = MaterialTheme.typography.bodySmall, color = c.secondary,
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 8.dp),
                     )
                 }
-                item { Box(Modifier.height(72.dp)) }
             }
         }
+        IosNavBar(
+            title = "Place Reminder",
+            progress = progress,
+            leading = { BarIconButton(GlyphKind.SLIDERS, "Permissions and setup", onSetup) },
+            trailing = { BarIconButton(GlyphKind.PLUS, "New reminder", onAdd) },
+        )
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = bottomInset))
     }
 }
 
 @Composable
 private fun Banner(text: String, action: String, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.large).background(cs.tertiaryContainer)
-            .border(1.5.dp, Brand.Amber, MaterialTheme.shapes.large).padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.Warning, contentDescription = null, tint = Brand.AmberDeep)
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = cs.onTertiaryContainer, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
-        Button(
-            onClick = onClick,
-            colors = ButtonDefaults.buttonColors(containerColor = Brand.Ink, contentColor = Brand.Paper),
-        ) { Text(action) }
-    }
-}
-
-@Composable
-private fun EmptyState(onAdd: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(top = 40.dp, start = 16.dp, end = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        RingGlyph(Modifier.size(width = 186.dp, height = 160.dp), headsUp = true, muted = false)
-        Text(
-            "No reminders yet", style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 24.dp),
-        )
-        Text(
-            "Pick a place on the map and get a nudge when you arrive, leave or stay.",
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp, bottom = 24.dp),
-        )
-        Button(
-            onClick = onAdd,
-            modifier = Modifier.height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Ink),
-            contentPadding = PaddingValues(horizontal = 24.dp),
+    val c = ios
+    Box(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.cell).padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-            Text("New reminder", modifier = Modifier.padding(start = 8.dp))
+            IconTile(c.tint) { Glyph(GlyphKind.WARNING, Color.White, 20.dp) }
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = c.label, modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
+            IosTextButton(action, onClick, bold = true)
         }
     }
 }
 
 @Composable
-private fun ReminderCard(
+private fun EmptyState(onAdd: () -> Unit) {
+    val c = ios
+    Column(
+        Modifier.fillMaxWidth().padding(top = 48.dp, start = 32.dp, end = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        RingGlyph(Modifier.size(width = 186.dp, height = 160.dp), pin = c.tint, ring = c.blue)
+        Text(
+            "No reminders yet", style = MaterialTheme.typography.titleLarge, color = c.label,
+            modifier = Modifier.padding(top = 24.dp),
+        )
+        Text(
+            "Pick a place on the map and get a nudge when you arrive, leave or stay.",
+            textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge, color = c.secondary,
+            modifier = Modifier.padding(top = 6.dp, bottom = 12.dp),
+        )
+        IosTextButton("New reminder", onAdd, bold = true)
+    }
+}
+
+@Composable
+private fun ReminderCell(
     r: Reminder,
+    first: Boolean,
+    last: Boolean,
     onClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
-    val cs = MaterialTheme.colorScheme
+    val c = ios
     val fired = r.frequency == Frequency.ONE_TIME && r.lastFiredAt != null
     val muted = !r.enabled || fired
-    Row(
-        Modifier.fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .background(cs.surfaceContainerLow)
-            .border(1.dp, cs.outlineVariant, MaterialTheme.shapes.large)
-            .clickable(onClick = onClick)
-            .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
-    ) {
-        Row(Modifier.weight(1f).alpha(if (muted) 0.55f else 1f)) {
-            RingGlyph(Modifier.size(width = 62.dp, height = 54.dp).padding(top = 4.dp), headsUp = r.usesHeadsUp, muted = muted)
-            Column(Modifier.weight(1f).padding(start = 12.dp, end = 4.dp)) {
-                Text(r.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (r.message.isNotBlank()) {
+    val shape = RoundedCornerShape(
+        topStart = if (first) 12.dp else 0.dp, topEnd = if (first) 12.dp else 0.dp,
+        bottomStart = if (last) 12.dp else 0.dp, bottomEnd = if (last) 12.dp else 0.dp,
+    )
+    Box(Modifier.padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxWidth().clip(shape).background(c.cell)) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .combinedClickable(onClick = onClick, onLongClick = { menu = true })
+                    .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val kind = when (r.trigger) { Trigger.ENTER -> GlyphKind.ARRIVE; Trigger.EXIT -> GlyphKind.LEAVE; Trigger.DWELL -> GlyphKind.STAY }
+                IconTile(if (muted) c.gray else c.tint) { Glyph(kind, Color.White, 20.dp) }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(
-                        r.message, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        r.name, style = MaterialTheme.typography.bodyLarge, color = if (muted) c.secondary else c.label,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (r.message.isNotBlank()) {
+                        Text(
+                            r.message, style = MaterialTheme.typography.bodyMedium, color = c.secondary,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Text(
+                        detailLine(r, fired), style = MaterialTheme.typography.bodySmall,
+                        color = c.secondary.copy(alpha = c.secondary.alpha * 0.9f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 1.dp),
                     )
                 }
-                FlowRow(
-                    Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    val neutral = cs.surfaceContainerHigh
-                    val triggerKind = when (r.trigger) { Trigger.ENTER -> GlyphKind.ARRIVE; Trigger.EXIT -> GlyphKind.LEAVE; Trigger.DWELL -> GlyphKind.STAY }
-                    Pill(triggerSummary(r), triggerKind, container = cs.secondaryContainer, content = cs.onSecondaryContainer)
-                    Pill(formatDistance(r.radiusMeters), GlyphKind.RADIUS, container = neutral, content = cs.onSurface)
-                    Pill(
-                        if (r.frequency == Frequency.ONE_TIME) "Once" else "Every time",
-                        if (r.frequency == Frequency.ONE_TIME) GlyphKind.ONCE else GlyphKind.REPEAT,
-                        container = neutral, content = cs.onSurface,
-                    )
-                    when (r.level) {
-                        Level.SILENT -> Pill("Silent", GlyphKind.SILENT, container = neutral, content = cs.onSurface)
-                        Level.NORMAL -> Pill("Normal", GlyphKind.NORMAL, container = neutral, content = cs.onSurface)
-                        Level.ALARM -> Pill("Alarm", GlyphKind.ALARM, container = cs.primaryContainer, content = cs.onPrimaryContainer)
-                    }
-                    if (r.usesHeadsUp) {
-                        Pill("Warns at ${formatDistance(r.headsUpMeters)}", GlyphKind.EARLY, container = cs.secondaryContainer, content = cs.onSecondaryContainer)
-                    }
-                    if (fired) Pill("Done", null, container = neutral, content = cs.onSurface)
-                }
+                IosSwitch(checked = r.enabled, onCheckedChange = onToggle)
             }
+            if (!last) IosDivider(inset = 58.dp)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Switch(
-                checked = r.enabled, onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Brand.Ink, checkedTrackColor = Brand.Amber, checkedBorderColor = Brand.Amber,
-                    uncheckedThumbColor = cs.outline, uncheckedTrackColor = cs.surfaceContainerHigh, uncheckedBorderColor = cs.outline,
-                ),
-                modifier = Modifier.padding(end = 8.dp),
-            )
-            Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = cs.onSurfaceVariant) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Edit") }, onClick = { menu = false; onClick() })
-                    DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; onDuplicate() })
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
-                }
-            }
+        DropdownMenu(
+            expanded = menu, onDismissRequest = { menu = false },
+            shape = RoundedCornerShape(14.dp), containerColor = c.elevated,
+        ) {
+            DropdownMenuItem(text = { Text("Edit", color = c.label) }, onClick = { menu = false; onClick() })
+            DropdownMenuItem(text = { Text("Duplicate", color = c.label) }, onClick = { menu = false; onDuplicate() })
+            DropdownMenuItem(text = { Text("Delete", color = c.red) }, onClick = { menu = false; onDelete() })
         }
     }
 }

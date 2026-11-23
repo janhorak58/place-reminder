@@ -1,38 +1,30 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Heads-up ring -->
+    <!-- Outer ring -->
     <path
-        android:pathData="M25,68a29,10.5 0,1 0,58 0a29,10.5 0,1 0,-58 0"
-        android:strokeColor="#5FB3D9"
-        android:strokeAlpha="0.7"
-        android:strokeWidth="1.8" />
-    <!-- Reminder radius -->
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.45"
+        android:pathData="M26,72a28,9.5 0,1 0,56 0a28,9.5 0,1 0,-56 0" />
+    <!-- Inner ring -->
     <path
-        android:pathData="M37,68a17,6 0,1 0,34 0a17,6 0,1 0,-34 0"
-        android:fillColor="#FFB800"
-        android:fillAlpha="0.12"
-        android:strokeColor="#FFB800"
-        android:strokeWidth="2" />
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.9"
+        android:pathData="M38,72a16,5.4 0,1 0,32 0a16,5.4 0,1 0,-32 0" />
+    <!-- Soft shadow under the pin tip -->
     <path
-        android:pathData="M48,68a6,2 0,1 0,12 0a6,2 0,1 0,-12 0"
         android:fillColor="#000000"
-        android:fillAlpha="0.25" />
+        android:fillAlpha="0.08"
+        android:pathData="M44,72.5a10,3.4 0,1 0,20 0a10,3.4 0,1 0,-20 0" />
     <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.14"
+        android:pathData="M47,72.5a7,2.4 0,1 0,14 0a7,2.4 0,1 0,-14 0" />
+    <!-- Pin -->
+    <path
+        android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
-        android:pathData="M54,68L43.07,51.04A13,13 0,1 1,64.93 51.04ZM48.5,44a5.5,5.5 0,1 0,11 0a5.5,5.5 0,1 0,-11 0Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="54"
-                android:startY="31"
-                android:endX="54"
-                android:endY="68"
-                android:startColor="#FFFFC933"
-                android:endColor="#FFFF9500" />
-        </aapt:attr>
-    </path>
+        android:pathData="M51.69,67.73L41.74,53.66A15,15 0,1 1,66.26 53.66L56.31,67.73Q54,71 51.69,67.73ZM48.5,45a5.5,5.5 0,1 0,11 0a5.5,5.5 0,1 0,-11 0Z" />
 </vector>

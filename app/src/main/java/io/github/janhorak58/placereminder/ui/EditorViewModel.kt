@@ -110,21 +110,26 @@ class EditorViewModel(app: Application, private val reminderId: Long) : AndroidV
         fitTick++
     }
 
+    private fun draft(): Reminder = (original ?: Reminder()).copy(
+        name = name.trim(),
+        message = message.trim(),
+        latitude = latitude ?: 0.0,
+        longitude = longitude ?: 0.0,
+        radiusMeters = radiusMeters ?: -1,
+        trigger = trigger,
+        dwellMinutes = dwellText.trim().toIntOrNull() ?: -1,
+        frequency = frequency,
+        level = level,
+        headsUpEnabled = headsUp,
+        headsUpMeters = headsUpMeters ?: -1,
+    )
+
+    /** The current form validation problem, or null when the form can be saved. */
+    val liveError: Validation.Error? get() = Validation.validate(draft(), hasLocation) as? Validation.Error
+
     /** Validates and stores the reminder. Calls [onDone] on success. */
     fun save(onDone: () -> Unit) {
-        val draft = (original ?: Reminder()).copy(
-            name = name.trim(),
-            message = message.trim(),
-            latitude = latitude ?: 0.0,
-            longitude = longitude ?: 0.0,
-            radiusMeters = radiusMeters ?: -1,
-            trigger = trigger,
-            dwellMinutes = dwellText.trim().toIntOrNull() ?: -1,
-            frequency = frequency,
-            level = level,
-            headsUpEnabled = headsUp,
-            headsUpMeters = headsUpMeters ?: -1,
-        )
+        val draft = draft()
         val result = Validation.validate(draft, hasLocation)
         if (result is Validation.Error) {
             error = result

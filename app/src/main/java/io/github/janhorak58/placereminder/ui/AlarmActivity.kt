@@ -33,12 +33,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,9 +43,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /** Full-screen alarm shown over the lockscreen. Loops sound and vibration until dismissed. */
 class AlarmActivity : ComponentActivity() {
@@ -67,7 +67,7 @@ class AlarmActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         readIntent(intent)
         setContent {
-            PlaceReminderTheme { AlarmScreen(title, text) { finishAndRemoveTask() } }
+            PlaceReminderTheme(darkTheme = true) { AlarmScreen(title, text) { finishAndRemoveTask() } }
         }
         startAlarm()
     }
@@ -136,59 +136,60 @@ class AlarmActivity : ComponentActivity() {
 
 @Composable
 private fun AlarmScreen(title: String, text: String, onDismiss: () -> Unit) {
+    val c = ios
     val animate = rememberAnimationsEnabled()
     val progress = if (animate) {
         val t = rememberInfiniteTransition(label = "pulse")
         t.animateFloat(
             0f, 1f,
-            infiniteRepeatable(tween(3600, easing = LinearEasing), RepeatMode.Restart),
+            infiniteRepeatable(tween(4200, easing = LinearEasing), RepeatMode.Restart),
             label = "ring",
         ).value
     } else {
-        0.15f
+        0.2f
     }
     Column(
-        Modifier.fillMaxSize().background(Brand.Ink).statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 24.dp),
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF1C1C1E), Color.Black)))
+            .statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Text("Place reminder", style = MaterialTheme.typography.titleSmall, color = c.secondary, modifier = Modifier.padding(top = 16.dp))
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val cx = size.width / 2f
-                val cy = size.height * 0.56f
-                val maxW = size.width * 1.15f
-                val minW = 56.dp.toPx()
+                val cy = size.height * 0.55f
+                drawCircle(
+                    Brush.radialGradient(listOf(c.tint.copy(alpha = 0.22f), Color.Transparent), center = Offset(cx, cy), radius = size.width * 0.8f),
+                    radius = size.width * 0.8f, center = Offset(cx, cy),
+                )
+                val maxW = size.width * 1.1f
+                val minW = 60.dp.toPx()
                 for (i in 0 until 3) {
                     val p = (progress + i / 3f) % 1f
                     val w = minW + (maxW - minW) * p
-                    val h = w * 0.44f
+                    val h = w * 0.42f
                     drawOval(
-                        Brand.Ring.copy(alpha = (1f - p) * 0.9f),
-                        Offset(cx - w / 2, cy - h / 2), Size(w, h), style = Stroke(2.5.dp.toPx()),
+                        Color.White.copy(alpha = (1f - p) * 0.28f),
+                        Offset(cx - w / 2, cy - h / 2), Size(w, h), style = Stroke(1.5.dp.toPx()),
                     )
                 }
-                val rw = size.width * 0.34f
+                val rw = size.width * 0.3f
                 val rh = rw * 0.36f
-                drawOval(Brand.Amber.copy(alpha = 0.16f), Offset(cx - rw / 2, cy - rh / 2), Size(rw, rh))
-                drawOval(Brand.Amber, Offset(cx - rw / 2, cy - rh / 2), Size(rw, rh), style = Stroke(3.dp.toPx()))
-                val ph = 150.dp.toPx()
-                drawPin(Offset(cx, cy), ph, amberBrush(cy - ph, cy))
+                drawOval(c.tint.copy(alpha = 0.18f), Offset(cx - rw / 2, cy - rh / 2), Size(rw, rh))
+                drawOval(c.tint, Offset(cx - rw / 2, cy - rh / 2), Size(rw, rh), style = Stroke(1.5.dp.toPx()))
+                drawPin(Offset(cx, cy), 140.dp.toPx(), c.tint)
             }
         }
-        Text("Place reminder", style = MaterialTheme.typography.labelLarge, color = Brand.Ring)
         Text(
-            title, style = MaterialTheme.typography.displaySmall, textAlign = TextAlign.Center,
-            color = Brand.Paper, modifier = Modifier.padding(top = 6.dp),
+            title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center, color = Color.White,
         )
         if (text.isNotBlank()) {
             Text(
-                text, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
-                color = Brand.Paper.copy(alpha = 0.85f), modifier = Modifier.padding(top = 10.dp),
+                text, style = MaterialTheme.typography.bodyLarge.copy(fontSize = 19.sp), textAlign = TextAlign.Center,
+                color = c.secondary, modifier = Modifier.padding(top = 8.dp),
             )
         }
-        Button(
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth().padding(top = 36.dp).height(68.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Brand.Amber, contentColor = Brand.Ink),
-        ) { Text("Dismiss", style = MaterialTheme.typography.titleLarge) }
+        IosFilledButton("Dismiss", onDismiss, Modifier.padding(top = 40.dp), radius = 30.dp)
     }
 }

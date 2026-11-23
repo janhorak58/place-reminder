@@ -2,12 +2,17 @@ package io.github.janhorak58.placereminder.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -17,104 +22,138 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.janhorak58.placereminder.R
 
-/** Brand palette, shared with the launcher icon and the landing page. */
-object Brand {
-    val Ink = Color(0xFF0E2233)
-    val InkDeep = Color(0xFF08141F)
-    val InkRaised = Color(0xFF16344B)
-    val Amber = Color(0xFFFFB800)
-    val AmberDeep = Color(0xFFFF9500)
-    val Ring = Color(0xFF5FB3D9)
-    val Paper = Color(0xFFF7FAFC)
-    val Text = Color(0xFF14283A)
-    val Muted = Color(0xFF4D6475)
-}
-
-private val Light = lightColorScheme(
-    primary = Brand.Ink, onPrimary = Brand.Paper,
-    primaryContainer = Color(0xFFFFE7A3), onPrimaryContainer = Brand.Ink,
-    secondary = Color(0xFF1B6A92), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD9EEF8), onSecondaryContainer = Brand.Ink,
-    tertiary = Brand.Amber, onTertiary = Brand.Ink,
-    tertiaryContainer = Color(0xFFFFEFC2), onTertiaryContainer = Brand.Text,
-    background = Brand.Paper, onBackground = Brand.Text,
-    surface = Brand.Paper, onSurface = Brand.Text,
-    surfaceVariant = Color(0xFFE6EEF3), onSurfaceVariant = Brand.Muted,
-    surfaceTint = Brand.Ink,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color.White,
-    surfaceContainer = Color(0xFFEEF4F8),
-    surfaceContainerHigh = Color(0xFFE6EEF3),
-    surfaceContainerHighest = Color(0xFFDCE7EE),
-    outline = Color(0xFF6A8090), outlineVariant = Color(0xFFD2DFE8),
-    error = Color(0xFFB3261E), onError = Color.White,
-    errorContainer = Color(0xFFFCE0DD), onErrorContainer = Color(0xFF5C0F0A),
-    inverseSurface = Brand.Ink, inverseOnSurface = Brand.Paper, inversePrimary = Brand.Amber,
+/** iOS system palette. Tint orange is shared with the launcher icon. */
+@Immutable
+class IosColors(
+    val background: Color,
+    val cell: Color,
+    val elevated: Color,
+    val label: Color,
+    val secondary: Color,
+    val separator: Color,
+    val segmentTrack: Color,
+    val segmentThumb: Color,
+    val tint: Color,
+    val blue: Color,
+    val green: Color,
+    val red: Color,
+    val gray: Color,
+    val bar: Color,
 )
 
-private val Dark = darkColorScheme(
-    primary = Brand.Amber, onPrimary = Brand.Ink,
-    primaryContainer = Color(0xFF4A3900), onPrimaryContainer = Color(0xFFFFE08A),
-    secondary = Brand.Ring, onSecondary = Brand.Ink,
-    secondaryContainer = Color(0xFF1A4660), onSecondaryContainer = Color(0xFFD6EEF9),
-    tertiary = Brand.Amber, onTertiary = Brand.Ink,
-    tertiaryContainer = Color(0xFF3F3109), onTertiaryContainer = Color(0xFFFFE9B0),
-    background = Brand.InkDeep, onBackground = Color(0xFFEAF2F7),
-    surface = Brand.InkDeep, onSurface = Color(0xFFEAF2F7),
-    surfaceVariant = Color(0xFF1B3449), onSurfaceVariant = Color(0xFFABC0CE),
-    surfaceTint = Brand.Amber,
-    surfaceContainerLowest = Color(0xFF06101A),
-    surfaceContainerLow = Brand.Ink,
-    surfaceContainer = Color(0xFF12293D),
-    surfaceContainerHigh = Color(0xFF173249),
-    surfaceContainerHighest = Color(0xFF1E3D56),
-    outline = Color(0xFF8AA3B4), outlineVariant = Color(0xFF2B4A62),
-    error = Color(0xFFFF8A80), onError = Color(0xFF3B0603),
-    errorContainer = Color(0xFF5C1A15), onErrorContainer = Color(0xFFFFDAD6),
-    inverseSurface = Brand.Paper, inverseOnSurface = Brand.Ink, inversePrimary = Brand.Ink,
+private val LightIos = IosColors(
+    background = Color(0xFFF2F2F7),
+    cell = Color.White,
+    elevated = Color.White,
+    label = Color.Black,
+    secondary = Color(0x993C3C43),
+    separator = Color(0xFFC6C6C8),
+    segmentTrack = Color(0x1F767680),
+    segmentThumb = Color.White,
+    tint = Color(0xFFFF9500),
+    blue = Color(0xFF007AFF),
+    green = Color(0xFF34C759),
+    red = Color(0xFFFF3B30),
+    gray = Color(0xFFAEAEB2),
+    bar = Color(0xEBF2F2F7),
 )
 
-/** Barlow Semi Condensed gives headings a road-sign voice. Barlow carries the reading text. */
-private val Display = FontFamily(
-    Font(R.font.barlowsemicondensed_semibold, FontWeight.SemiBold),
-    Font(R.font.barlowsemicondensed_bold, FontWeight.Bold),
+private val DarkIos = IosColors(
+    background = Color.Black,
+    cell = Color(0xFF1C1C1E),
+    elevated = Color(0xFF2C2C2E),
+    label = Color.White,
+    secondary = Color(0x99EBEBF5),
+    separator = Color(0xFF38383A),
+    segmentTrack = Color(0x3D767680),
+    segmentThumb = Color(0xFF636366),
+    tint = Color(0xFFFF9F0A),
+    blue = Color(0xFF0A84FF),
+    green = Color(0xFF34C759),
+    red = Color(0xFFFF3B30),
+    gray = Color(0xFF636366),
+    bar = Color(0xEB000000),
 )
-private val Body = FontFamily(
-    Font(R.font.barlow_regular, FontWeight.Normal),
-    Font(R.font.barlow_medium, FontWeight.Medium),
-    Font(R.font.barlow_semibold, FontWeight.SemiBold),
+
+val LocalIos = staticCompositionLocalOf { LightIos }
+
+/** Shortcut for the iOS palette of the current theme. */
+val ios: IosColors @Composable @ReadOnlyComposable get() = LocalIos.current
+
+private fun scheme(c: IosColors, dark: Boolean): ColorScheme =
+    if (dark) {
+        darkColorScheme(
+            primary = c.tint, onPrimary = Color.Black,
+            secondary = c.blue, onSecondary = Color.White,
+            tertiary = c.green, onTertiary = Color.White,
+            background = c.background, onBackground = c.label,
+            surface = c.cell, onSurface = c.label,
+            surfaceVariant = c.elevated, onSurfaceVariant = c.secondary,
+            surfaceTint = Color.Transparent,
+            surfaceContainerLowest = c.background, surfaceContainerLow = c.cell,
+            surfaceContainer = c.elevated, surfaceContainerHigh = c.elevated, surfaceContainerHighest = c.elevated,
+            outline = c.separator, outlineVariant = c.separator,
+            error = c.red, onError = Color.White,
+            inverseSurface = Color.White, inverseOnSurface = Color.Black, inversePrimary = c.tint,
+        )
+    } else {
+        lightColorScheme(
+            primary = c.tint, onPrimary = Color.Black,
+            secondary = c.blue, onSecondary = Color.White,
+            tertiary = c.green, onTertiary = Color.White,
+            background = c.background, onBackground = c.label,
+            surface = c.cell, onSurface = c.label,
+            surfaceVariant = c.background, onSurfaceVariant = c.secondary,
+            surfaceTint = Color.Transparent,
+            surfaceContainerLowest = c.cell, surfaceContainerLow = c.cell,
+            surfaceContainer = c.elevated, surfaceContainerHigh = c.elevated, surfaceContainerHighest = c.elevated,
+            outline = c.separator, outlineVariant = c.separator,
+            error = c.red, onError = Color.White,
+            inverseSurface = Color(0xFF1C1C1E), inverseOnSurface = Color.White, inversePrimary = c.tint,
+        )
+    }
+
+/** Inter stands in for SF Pro, which cannot be bundled on Android. */
+private val Inter = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_regular, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold),
 )
 
-private fun display(size: Int, line: Int, weight: FontWeight = FontWeight.Bold, spacing: Double = 0.0) =
-    TextStyle(fontFamily = Display, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp, letterSpacing = spacing.sp)
+private fun t(size: Int, line: Int, weight: FontWeight = FontWeight.Normal, spacing: Double = 0.0) =
+    TextStyle(fontFamily = Inter, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp, letterSpacing = spacing.sp)
 
-private fun body(size: Int, line: Int, weight: FontWeight = FontWeight.Normal, spacing: Double = 0.0) =
-    TextStyle(fontFamily = Body, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp, letterSpacing = spacing.sp)
-
+/** iOS type scale: large title 34, title 22, body 17, footnote 13, caption 12. */
 private val AppTypography = Typography(
-    displayLarge = display(56, 60), displayMedium = display(44, 48), displaySmall = display(36, 40),
-    headlineLarge = display(34, 38, spacing = -0.2), headlineMedium = display(28, 32), headlineSmall = display(24, 28, FontWeight.SemiBold),
-    titleLarge = display(22, 26, FontWeight.SemiBold), titleMedium = display(19, 23, FontWeight.SemiBold, 0.1),
-    titleSmall = body(15, 20, FontWeight.SemiBold, 0.1),
-    bodyLarge = body(17, 24), bodyMedium = body(15, 21), bodySmall = body(13, 18),
-    labelLarge = body(16, 20, FontWeight.SemiBold, 0.2), labelMedium = body(13, 16, FontWeight.Medium, 0.3),
-    labelSmall = body(12, 16, FontWeight.Medium, 0.4),
+    displayLarge = t(34, 41, FontWeight.Bold, -0.6), displayMedium = t(34, 41, FontWeight.Bold, -0.6),
+    displaySmall = t(34, 41, FontWeight.Bold, -0.6),
+    headlineLarge = t(34, 41, FontWeight.Bold, -0.6), headlineMedium = t(28, 34, FontWeight.Bold, -0.4),
+    headlineSmall = t(22, 28, FontWeight.SemiBold, -0.3),
+    titleLarge = t(22, 28, FontWeight.SemiBold, -0.3), titleMedium = t(17, 22, FontWeight.SemiBold, -0.4),
+    titleSmall = t(15, 20, FontWeight.SemiBold, -0.2),
+    bodyLarge = t(17, 22, spacing = -0.4), bodyMedium = t(15, 20, spacing = -0.2), bodySmall = t(13, 18, spacing = -0.1),
+    labelLarge = t(17, 22, FontWeight.SemiBold, -0.4), labelMedium = t(13, 18, FontWeight.Medium, -0.1),
+    labelSmall = t(12, 16, FontWeight.Medium),
 )
 
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
+    extraSmall = RoundedCornerShape(7.dp),
     small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(14.dp),
+    extraLarge = RoundedCornerShape(14.dp),
 )
 
 @Composable
-fun PlaceReminderTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) Dark else Light,
-        typography = AppTypography,
-        shapes = AppShapes,
-        content = content,
-    )
+fun PlaceReminderTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val colors = if (darkTheme) DarkIos else LightIos
+    CompositionLocalProvider(LocalIos provides colors) {
+        MaterialTheme(
+            colorScheme = scheme(colors, darkTheme),
+            typography = AppTypography,
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }

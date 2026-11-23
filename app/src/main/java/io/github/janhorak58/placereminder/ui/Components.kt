@@ -2,50 +2,71 @@ package io.github.janhorak58.placereminder.ui
 
 import android.content.Context
 import android.provider.Settings
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -59,6 +80,9 @@ fun rememberAnimationsEnabled(): Boolean {
 private fun animationsEnabled(context: Context) =
     Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
 
+/** Text on a tint-coloured fill. Black keeps contrast high on orange. */
+val OnTint = Color.Black
+
 // ---------------------------------------------------------------------------------------------
 // Pin and rings: the launcher icon motif, drawn in the icon's own units (pin tip at 54,68).
 // ---------------------------------------------------------------------------------------------
@@ -66,7 +90,7 @@ private fun animationsEnabled(context: Context) =
 private const val PIN_HEIGHT_UNITS = 37f
 
 /** Draws the icon pin with its tip at [tip]. The pin is [height] px tall. */
-fun DrawScope.drawPin(tip: Offset, height: Float, brush: Brush) {
+fun DrawScope.drawPin(tip: Offset, height: Float, color: Color) {
     val k = height / PIN_HEIGHT_UNITS
     val c = Offset(tip.x, tip.y - 24f * k)
     val r = 13f * k
@@ -78,58 +102,52 @@ fun DrawScope.drawPin(tip: Offset, height: Float, brush: Brush) {
         close()
         addOval(Rect(c.x - 5.5f * k, c.y - 5.5f * k, c.x + 5.5f * k, c.y + 5.5f * k))
     }
-    drawPath(path, brush)
+    drawPath(path, color)
 }
 
-fun amberBrush(top: Float, bottom: Float) =
-    Brush.verticalGradient(listOf(Brand.Amber, Brand.AmberDeep), startY = top, endY = bottom)
-
-/**
- * Pin with its radius ring and, when enabled, the heads-up ring. Muted renders everything in
- * neutral tones for disabled or finished reminders.
- */
+/** Pin with a radius ring and a wider heads-up ring, drawn in thin strokes. */
 @Composable
-fun RingGlyph(modifier: Modifier = Modifier, headsUp: Boolean, muted: Boolean, showOuter: Boolean = true) {
-    val neutral = MaterialTheme.colorScheme.outline
+fun RingGlyph(modifier: Modifier = Modifier, pin: Color, ring: Color, radiusRing: Color = pin) {
     Canvas(modifier) {
         val k = size.width / 62f
         val cx = size.width / 2f
         val cy = size.height - 13f * k
-        val ringColor = if (muted) neutral else Brand.Ring
-        val amber = if (muted) neutral else Brand.Amber
-        if (headsUp && showOuter) {
-            drawOval(ringColor.copy(alpha = 0.85f), Offset(cx - 29f * k, cy - 10.5f * k), Size(58f * k, 21f * k), style = Stroke(1.8f * k))
-        }
-        drawOval(amber.copy(alpha = 0.16f), Offset(cx - 17f * k, cy - 6f * k), Size(34f * k, 12f * k))
-        drawOval(amber, Offset(cx - 17f * k, cy - 6f * k), Size(34f * k, 12f * k), style = Stroke(2f * k))
-        val h = 37f * k
-        val brush = if (muted) Brush.verticalGradient(listOf(neutral, neutral)) else amberBrush(cy - h, cy)
-        drawPin(Offset(cx, cy), h, brush)
+        val line = 1.5.dp.toPx()
+        drawOval(ring, Offset(cx - 29f * k, cy - 10.5f * k), Size(58f * k, 21f * k), style = Stroke(line))
+        drawOval(radiusRing.copy(alpha = 0.14f), Offset(cx - 17f * k, cy - 6f * k), Size(34f * k, 12f * k))
+        drawOval(radiusRing, Offset(cx - 17f * k, cy - 6f * k), Size(34f * k, 12f * k), style = Stroke(line))
+        drawPin(Offset(cx, cy), 37f * k, pin)
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Small line glyphs on a 24 unit grid.
+// Thin line glyphs on a 24 unit grid, 1.5dp stroke with round caps like SF Symbols.
 // ---------------------------------------------------------------------------------------------
 
-enum class GlyphKind { ARRIVE, LEAVE, STAY, ONCE, REPEAT, SILENT, NORMAL, ALARM, RADIUS, EARLY }
+enum class GlyphKind { ARRIVE, LEAVE, STAY, ONCE, REPEAT, SILENT, NORMAL, ALARM, RADIUS, EARLY, PIN, PLUS, SLIDERS, CHECK, CHEVRON, WARNING, LOCATE }
 
 private val bellPath = PathParser().parsePathString("M12 3.5c-3.2 0-5.5 2.3-5.5 5.5v3.2L4.5 16h15l-2-3.8V9c0-3.2-2.3-5.5-5.5-5.5z").toPath()
+private val pinPath = PathParser().parsePathString("M12 21.5C12 21.5 5 15 5 9.5a7 7 0 0 1 14 0C19 15 12 21.5 12 21.5z").toPath()
+private val locatePath = PathParser().parsePathString("M20 4L4 11l7 2l2 7z").toPath()
+private val warnPath = PathParser().parsePathString("M12 3.5L21.5 20h-19z").toPath()
 
 @Composable
-fun Glyph(kind: GlyphKind, tint: Color, size: Dp = 20.dp) {
+fun Glyph(kind: GlyphKind, tint: Color, size: Dp = 20.dp, strokeWidth: Dp = 1.5.dp) {
     Canvas(Modifier.size(size)) {
         val s = this.size.minDimension / 24f
-        val stroke = Stroke(2f * s, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val w = strokeWidth.toPx()
+        val stroke = Stroke(w, cap = StrokeCap.Round, join = StrokeJoin.Round)
         fun p(x: Float, y: Float) = Offset(x * s, y * s)
-        fun line(a: Offset, b: Offset) = drawLine(tint, a, b, strokeWidth = 2f * s, cap = StrokeCap.Round)
+        fun line(a: Offset, b: Offset) = drawLine(tint, a, b, strokeWidth = w, cap = StrokeCap.Round)
         fun ring(cx: Float, cy: Float, r: Float, filled: Boolean = false) {
             if (filled) drawCircle(tint, r * s, p(cx, cy)) else drawCircle(tint, r * s, p(cx, cy), style = stroke)
         }
-        fun bell() {
+        fun outline(path: Path) {
             val m = Matrix().apply { scale(s, s) }
-            val path = Path().apply { addPath(bellPath); transform(m) }
-            drawPath(path, tint, style = stroke)
+            drawPath(Path().apply { addPath(path); transform(m) }, tint, style = stroke)
+        }
+        fun bell() {
+            outline(bellPath)
             line(p(10f, 19.5f), p(14f, 19.5f))
         }
         when (kind) {
@@ -171,172 +189,257 @@ fun Glyph(kind: GlyphKind, tint: Color, size: Dp = 20.dp) {
                 drawArc(tint, 200f, 70f, false, p(-1f, 1f), Size(10f * s, 10f * s), style = stroke)
                 drawArc(tint, 270f, 70f, false, p(15f, 1f), Size(10f * s, 10f * s), style = stroke)
             }
-            GlyphKind.RADIUS -> {
-                ring(12f, 12f, 8.5f); ring(12f, 12f, 2.2f, filled = true)
-            }
+            GlyphKind.RADIUS -> { ring(12f, 12f, 8.5f); ring(12f, 12f, 2.2f, filled = true) }
             GlyphKind.EARLY -> {
-                drawArc(tint, 0f, 360f, false, p(3f, 3f), Size(18f * s, 18f * s), style = Stroke(1.6f * s, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(2.4f * s, 2.4f * s))))
+                drawArc(
+                    tint, 0f, 360f, false, p(3f, 3f), Size(18f * s, 18f * s),
+                    style = Stroke(w, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(2.4f * s, 2.4f * s))),
+                )
                 ring(12f, 12f, 4f)
             }
+            GlyphKind.PIN -> { outline(pinPath); ring(12f, 9.5f, 2.4f) }
+            GlyphKind.PLUS -> { line(p(12f, 4.5f), p(12f, 19.5f)); line(p(4.5f, 12f), p(19.5f, 12f)) }
+            GlyphKind.SLIDERS -> {
+                line(p(3.5f, 7f), p(10.5f, 7f)); line(p(17.5f, 7f), p(20.5f, 7f)); ring(14f, 7f, 3.2f)
+                line(p(3.5f, 17f), p(6.5f, 17f)); line(p(13.5f, 17f), p(20.5f, 17f)); ring(10f, 17f, 3.2f)
+            }
+            GlyphKind.CHECK -> { line(p(5f, 12.5f), p(10f, 17.5f)); line(p(10f, 17.5f), p(19f, 7f)) }
+            GlyphKind.CHEVRON -> { line(p(9f, 5f), p(16f, 12f)); line(p(16f, 12f), p(9f, 19f)) }
+            GlyphKind.WARNING -> {
+                outline(warnPath); line(p(12f, 10f), p(12f, 14.5f)); ring(12f, 17.3f, 0.6f, filled = true)
+            }
+            GlyphKind.LOCATE -> outline(locatePath)
         }
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Layout pieces
+// Navigation bar with a large title that collapses on scroll.
 // ---------------------------------------------------------------------------------------------
 
-/** Navy header band with faint geofence rings. Sits under the status bar on every screen. */
+/** Scroll-driven values for the nav bar: background/hairline opacity and small-title opacity. */
+class BarProgress(val background: Float, val title: Float)
+
 @Composable
-fun InkHeader(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Brand.Ink)
-            .drawBehind {
-                val cx = size.width * 0.9f
-                val cy = size.height * 0.85f
-                val widths = listOf(70.dp, 130.dp, 200.dp, 290.dp)
-                widths.forEachIndexed { i, w ->
-                    val wp = w.toPx()
-                    val hp = wp * 0.36f
-                    val color = if (i == 0) Brand.Amber else Brand.Ring
-                    drawOval(
-                        color.copy(alpha = if (i == 0) 0.55f else 0.30f - i * 0.06f),
-                        Offset(cx - wp / 2, cy - hp / 2), Size(wp, hp), style = Stroke(1.5.dp.toPx()),
-                    )
-                }
-            }
-            .statusBarsPadding(),
+fun rememberBarProgress(state: LazyListState, titleHeight: Dp = 48.dp): BarProgress {
+    val px = with(LocalDensity.current) { titleHeight.toPx() }
+    val index = state.firstVisibleItemIndex
+    val offset = state.firstVisibleItemScrollOffset
+    if (index > 0) return BarProgress(1f, 1f)
+    return BarProgress((offset / 10f).coerceIn(0f, 1f), ((offset - px * 0.4f) / (px * 0.5f)).coerceIn(0f, 1f))
+}
+
+val NavBarHeight = 44.dp
+
+@Composable
+fun IosNavBar(
+    title: String,
+    progress: BarProgress,
+    modifier: Modifier = Modifier,
+    leading: @Composable () -> Unit = {},
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    val c = ios
+    Box(modifier.fillMaxWidth()) {
+        Box(Modifier.matchParentSize().alpha(progress.background).background(c.bar))
+        Box(Modifier.fillMaxWidth().statusBarsPadding().height(NavBarHeight)) {
+            Box(Modifier.align(Alignment.CenterStart).padding(start = 8.dp)) { leading() }
+            Text(
+                title, style = MaterialTheme.typography.titleMedium, color = c.label, maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 96.dp).alpha(progress.title),
+            )
+            Row(Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) { trailing() }
+        }
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(0.5.dp).alpha(progress.background).background(c.separator))
+    }
+}
+
+/** Bar icon button with a 44dp touch target. */
+@Composable
+fun BarIconButton(kind: GlyphKind, description: String, onClick: () -> Unit, tint: Color = ios.tint, size: Dp = 24.dp) {
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).semantics { contentDescription = description }
+            .clickable(onClick = onClick, role = Role.Button),
+        contentAlignment = Alignment.Center,
+    ) { Glyph(kind, tint, size, 1.6.dp) }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Grouped list pieces
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Inset grouped section: uppercase footnote [header], rounded cell container, footnote [footer].
+ * [error] shows as a red footnote above the footer.
+ */
+@Composable
+fun IosSection(
+    modifier: Modifier = Modifier,
+    header: String? = null,
+    footer: String? = null,
+    error: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val c = ios
+    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        if (header != null) {
+            Text(
+                header.uppercase(), style = MaterialTheme.typography.bodySmall, color = c.secondary,
+                modifier = Modifier.padding(start = 16.dp, bottom = 7.dp),
+            )
+        }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(c.cell), content = content)
+        if (error != null) {
+            Text(error, style = MaterialTheme.typography.bodySmall, color = c.red, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 7.dp))
+        }
+        if (footer != null) {
+            Text(footer, style = MaterialTheme.typography.bodySmall, color = c.secondary, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 7.dp))
+        }
+    }
+}
+
+@Composable
+fun IosDivider(inset: Dp = 16.dp) {
+    Box(Modifier.fillMaxWidth().padding(start = inset).height(0.5.dp).background(ios.separator))
+}
+
+/** A 44dp minimum cell row. */
+@Composable
+fun IosRow(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    padding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = 44.dp)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(padding),
+        verticalAlignment = Alignment.CenterVertically,
         content = content,
     )
 }
 
-/** Titled group of fields. */
+/** Rounded-square tile that holds a white glyph, like the icons in iOS Settings. */
 @Composable
-fun SectionCard(title: String, modifier: Modifier = Modifier, hint: String? = null, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.large)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(4.dp).height(18.dp).clip(CircleShape).background(Brand.Amber))
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 10.dp))
-            }
-            if (hint != null) {
-                Text(
-                    hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp, start = 14.dp),
-                )
-            }
-        }
-        content()
-    }
-}
-
-/** Compact label with a glyph, used for the facts on a reminder card. */
-@Composable
-fun Pill(text: String, kind: GlyphKind?, modifier: Modifier = Modifier, container: Color, content: Color) {
-    Row(
-        modifier.clip(CircleShape).background(container).padding(start = if (kind != null) 8.dp else 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        if (kind != null) Glyph(kind, content, 15.dp)
-        Text(text, style = MaterialTheme.typography.labelMedium, color = content)
-    }
+fun IconTile(color: Color, modifier: Modifier = Modifier, size: Dp = 30.dp, content: @Composable () -> Unit) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(size * 0.23f)).background(color),
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }
 
 @Composable
-private fun optionColors(selected: Boolean): Triple<Color, Color, BorderStroke> {
-    val cs = MaterialTheme.colorScheme
-    return if (selected) {
-        Triple(cs.primaryContainer, cs.onPrimaryContainer, BorderStroke(2.dp, cs.primary))
-    } else {
-        Triple(cs.surface, cs.onSurface, BorderStroke(1.dp, cs.outline.copy(alpha = 0.55f)))
-    }
-}
-
-/** Vertical choice tile: glyph over a label. Place several in a Row with weight. */
-@Composable
-fun OptionTile(selected: Boolean, onClick: () -> Unit, kind: GlyphKind, label: String, modifier: Modifier = Modifier) {
-    val (bg, fg, border) = optionColors(selected)
-    Column(
-        modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(bg)
-            .border(border, MaterialTheme.shapes.medium)
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-            .padding(vertical = 12.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+fun IosSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val c = ios
+    val x by animateDpAsState(if (checked) 20.dp else 0.dp, tween(180), label = "thumb")
+    val track by animateColorAsState(if (checked) c.green else c.segmentTrack, tween(180), label = "track")
+    Box(
+        modifier.size(width = 51.dp, height = 31.dp).clip(CircleShape).background(track).padding(2.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
     ) {
-        Glyph(kind, fg, 26.dp)
-        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
-    }
-}
-
-/** Horizontal choice row: glyph, title and a one-line description of what happens. */
-@Composable
-fun OptionRow(selected: Boolean, onClick: () -> Unit, kind: GlyphKind, title: String, description: String, modifier: Modifier = Modifier) {
-    val (bg, fg, border) = optionColors(selected)
-    val tick = MaterialTheme.colorScheme.onPrimary
-    Row(
-        modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(bg)
-            .border(border, MaterialTheme.shapes.medium)
-            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Glyph(kind, fg, 26.dp)
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = fg)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = if (selected) fg else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
         Box(
-            Modifier.size(22.dp).clip(CircleShape)
-                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
-                .border(2.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) {
-                Canvas(Modifier.size(12.dp)) {
-                    val c = tick
-                    drawLine(c, Offset(size.width * 0.1f, size.height * 0.55f), Offset(size.width * 0.4f, size.height * 0.85f), 2.2f * density, StrokeCap.Round)
-                    drawLine(c, Offset(size.width * 0.4f, size.height * 0.85f), Offset(size.width * 0.92f, size.height * 0.15f), 2.2f * density, StrokeCap.Round)
+            Modifier.offset(x = x).size(27.dp).shadow(2.dp, CircleShape).background(Color.White, CircleShape),
+        )
+    }
+}
+
+/** iOS segmented control: grey track with a white sliding selection. */
+@Composable
+fun IosSegmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val c = ios
+    BoxWithConstraints(modifier.height(32.dp).clip(RoundedCornerShape(9.dp)).background(c.segmentTrack).padding(2.dp)) {
+        val segment = maxWidth / options.size
+        val x by animateDpAsState(segment * selected, tween(200), label = "segment")
+        Box(
+            Modifier.offset(x = x).width(segment).fillMaxHeight()
+                .shadow(1.dp, RoundedCornerShape(7.dp)).background(c.segmentThumb, RoundedCornerShape(7.dp)),
+        )
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { i, label ->
+                val source = remember { MutableInteractionSource() }
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().selectable(
+                        selected = i == selected, interactionSource = source, indication = null,
+                        role = Role.RadioButton, onClick = { onSelect(i) },
+                    ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label, color = c.label, maxLines = 1, fontSize = 13.sp,
+                        fontWeight = if (i == selected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
                 }
             }
         }
     }
 }
 
+/** Borderless text field for use inside a cell. */
 @Composable
-fun fieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = MaterialTheme.colorScheme.onSurface,
-    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-    errorTextColor = MaterialTheme.colorScheme.onSurface,
-    focusedContainerColor = MaterialTheme.colorScheme.surface,
-    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-    errorContainerColor = MaterialTheme.colorScheme.surface,
-    focusedBorderColor = MaterialTheme.colorScheme.secondary,
-    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-    focusedLabelColor = MaterialTheme.colorScheme.secondary,
-    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    cursorColor = MaterialTheme.colorScheme.secondary,
-    focusedSupportingTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unfocusedSupportingTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-)
+fun IosTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    singleLine: Boolean = true,
+    textAlign: TextAlign = TextAlign.Start,
+) {
+    val c = ios
+    val style = MaterialTheme.typography.bodyLarge.copy(color = c.label, textAlign = textAlign)
+    BasicTextField(
+        value = value, onValueChange = onValueChange, modifier = modifier,
+        singleLine = singleLine, maxLines = if (singleLine) 1 else 4,
+        keyboardOptions = keyboardOptions, textStyle = style, cursorBrush = SolidColor(c.tint),
+        decorationBox = { inner ->
+            Box(contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.CenterStart) {
+                if (value.isEmpty()) Text(placeholder, style = style.copy(color = c.secondary), maxLines = 1)
+                inner()
+            }
+        },
+    )
+}
+
+@Composable
+fun IosTextButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, bold: Boolean = false) {
+    val c = ios
+    Box(
+        modifier.heightIn(min = 44.dp).clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal),
+            color = if (enabled) c.tint else c.secondary.copy(alpha = 0.5f),
+        )
+    }
+}
+
+/** Small tinted capsule button, like the iOS "Get" button. */
+@Composable
+fun IosCapsuleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val c = ios
+    Text(
+        text, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center,
+        color = if (enabled) c.tint else c.secondary.copy(alpha = 0.6f),
+        modifier = modifier.clip(CircleShape).background(if (enabled) c.tint.copy(alpha = 0.16f) else c.segmentTrack)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+    )
+}
+
+/** Large rounded button filled with the tint colour. */
+@Composable
+fun IosFilledButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, radius: Dp = 14.dp) {
+    val c = ios
+    Box(
+        modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(radius))
+            .background(if (enabled) c.tint else c.segmentTrack)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) OnTint else c.secondary)
+    }
+}
