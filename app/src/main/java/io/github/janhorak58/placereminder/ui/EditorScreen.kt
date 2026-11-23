@@ -27,9 +27,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -46,8 +48,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
@@ -115,7 +120,23 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
             Modifier.weight(1f).verticalScroll(scroll).navigationBarsPadding().padding(top = 8.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Column(Modifier.padding(horizontal = 16.dp)) {
+            Column {
+            if (vm.searchAvailable) {
+                val focus = LocalFocusManager.current
+                val near = if (vm.hasLocation) Pair(vm.latitude!!, vm.longitude!!) else startCenter?.let { Pair(it.latitude, it.longitude) }
+                SearchField(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    query = vm.searchQuery,
+                    onQuery = { vm.onSearchQuery(it, near) },
+                    onSubmit = { vm.submitSearch(near) },
+                    onClear = { vm.clearSearch() },
+                )
+                SearchResults(vm.searchState) { place ->
+                    vm.pickPlace(place)
+                    focus.clearFocus()
+                }
+            }
+                Column(Modifier.padding(horizontal = 16.dp)) {
                 Box(Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(12.dp))) {
                     LocationMap(
                         modifier = Modifier.fillMaxSize(),
@@ -144,6 +165,7 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                     color = if (locationError != null) c.red else c.secondary,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 7.dp),
                 )
+                }
             }
 
             IosSection(error = errorFor(Validation.Field.NAME)) {
@@ -273,6 +295,60 @@ fun EditorScreen(vm: EditorViewModel, onClose: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchField(modifier: Modifier, query: String, onQuery: (String) -> Unit, onSubmit: () -> Unit, onClear: () -> Unit) {
+    val c = ios
+    Row(
+        modifier.fillMaxWidth().padding(bottom = 10.dp).height(40.dp).clip(RoundedCornerShape(10.dp)).background(c.segmentTrack)
+            .padding(start = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(GlyphKind.MAGNIFY, c.secondary, 18.dp)
+        IosTextField(
+            query, onQuery, "Search for an address or place",
+            Modifier.weight(1f).padding(horizontal = 8.dp),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
+        )
+        if (query.isNotEmpty()) {
+            BarIconButton(GlyphKind.CLEAR, "Clear search", onClear, tint = c.secondary, size = 16.dp)
+        } else {
+            Spacer(Modifier.width(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun SearchResults(state: SearchState, onPick: (PlaceResult) -> Unit) {
+    val c = ios
+    if (state is SearchState.Idle) return
+    IosSection(modifier = Modifier.padding(bottom = 10.dp)) {
+        when (state) {
+            is SearchState.Results -> state.places.forEachIndexed { i, p ->
+                if (i > 0) IosDivider()
+                IosRow(onClick = { onPick(p) }) {
+                    Glyph(GlyphKind.PIN, c.tint, 20.dp)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(p.title, style = MaterialTheme.typography.bodyLarge, color = c.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (p.subtitle.isNotEmpty()) {
+                            Text(p.subtitle, style = MaterialTheme.typography.bodySmall, color = c.secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+            SearchState.Loading -> IosRow {
+                CircularProgressIndicator(Modifier.size(18.dp), color = c.secondary, strokeWidth = 2.dp)
+                Text("Searching", style = MaterialTheme.typography.bodyLarge, color = c.secondary, modifier = Modifier.padding(start = 12.dp))
+            }
+            SearchState.Empty -> IosRow { Text("No results", style = MaterialTheme.typography.bodyLarge, color = c.secondary) }
+            SearchState.Unavailable -> IosRow {
+                Text("Search unavailable, check your connection", style = MaterialTheme.typography.bodyLarge, color = c.red)
+            }
+            SearchState.Idle -> {}
         }
     }
 }

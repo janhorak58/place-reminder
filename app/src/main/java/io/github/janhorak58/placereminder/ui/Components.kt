@@ -32,6 +32,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -124,7 +125,7 @@ fun RingGlyph(modifier: Modifier = Modifier, pin: Color, ring: Color, radiusRing
 // Thin line glyphs on a 24 unit grid, 1.5dp stroke with round caps like SF Symbols.
 // ---------------------------------------------------------------------------------------------
 
-enum class GlyphKind { ARRIVE, LEAVE, STAY, ONCE, REPEAT, SILENT, NORMAL, ALARM, RADIUS, EARLY, PIN, PLUS, SLIDERS, CHECK, CHEVRON, WARNING, LOCATE }
+enum class GlyphKind { ARRIVE, LEAVE, STAY, ONCE, REPEAT, SILENT, NORMAL, ALARM, RADIUS, EARLY, PIN, PLUS, SLIDERS, CHECK, CHEVRON, WARNING, LOCATE, MAGNIFY, CLEAR }
 
 private val bellPath = PathParser().parsePathString("M12 3.5c-3.2 0-5.5 2.3-5.5 5.5v3.2L4.5 16h15l-2-3.8V9c0-3.2-2.3-5.5-5.5-5.5z").toPath()
 private val pinPath = PathParser().parsePathString("M12 21.5C12 21.5 5 15 5 9.5a7 7 0 0 1 14 0C19 15 12 21.5 12 21.5z").toPath()
@@ -209,6 +210,8 @@ fun Glyph(kind: GlyphKind, tint: Color, size: Dp = 20.dp, strokeWidth: Dp = 1.5.
                 outline(warnPath); line(p(12f, 10f), p(12f, 14.5f)); ring(12f, 17.3f, 0.6f, filled = true)
             }
             GlyphKind.LOCATE -> outline(locatePath)
+            GlyphKind.MAGNIFY -> { ring(10.5f, 10.5f, 6f); line(p(15f, 15f), p(20f, 20f)) }
+            GlyphKind.CLEAR -> { line(p(6f, 6f), p(18f, 18f)); line(p(18f, 6f), p(6f, 18f)) }
         }
     }
 }
@@ -386,13 +389,14 @@ fun IosTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     singleLine: Boolean = true,
     textAlign: TextAlign = TextAlign.Start,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
     val c = ios
     val style = MaterialTheme.typography.bodyLarge.copy(color = c.label, textAlign = textAlign)
     BasicTextField(
         value = value, onValueChange = onValueChange, modifier = modifier,
         singleLine = singleLine, maxLines = if (singleLine) 1 else 4,
-        keyboardOptions = keyboardOptions, textStyle = style, cursorBrush = SolidColor(c.tint),
+        keyboardOptions = keyboardOptions, keyboardActions = keyboardActions, textStyle = style, cursorBrush = SolidColor(c.tint),
         decorationBox = { inner ->
             Box(contentAlignment = if (textAlign == TextAlign.End) Alignment.CenterEnd else Alignment.CenterStart) {
                 if (value.isEmpty()) Text(placeholder, style = style.copy(color = c.secondary), maxLines = 1)

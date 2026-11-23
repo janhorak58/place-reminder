@@ -17,7 +17,11 @@ import io.github.janhorak58.placereminder.data.Reminder
 import io.github.janhorak58.placereminder.data.Trigger
 import io.github.janhorak58.placereminder.data.Validation
 import io.github.janhorak58.placereminder.geofence.GeofenceManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -82,6 +86,75 @@ class EditorViewModel(app: Application, private val reminderId: Long) : AndroidV
         latitude = lat
         longitude = lon
         fitTick++
+    }
+
+    // --- Address search -------------------------------------------------------------------
+
+    private val places = PlaceSearch(app)
+    private var searchJob: Job? = null
+
+    /** False when the device has no geocoder, so the search field is hidden. */
+    val searchAvailable get() = places.available
+
+    var searchQuery by mutableStateOf("")
+        private set
+    var searchState by mutableStateOf<SearchState>(SearchState.Idle)
+        private set
+
+    /** Called as the user types. Waits for a pause, and ignores queries that are too short. */
+    fun onSearchQuery(text: String, near: Pair<Double, Double>?) {
+        searchQuery = text
+        val q = text.trim()
+        searchJob?.cancel()
+        if (q.length < MIN_SEARCH_CHARS) {
+            searchState = SearchState.Idle
+            return
+        }
+        searchState = SearchState.Loading
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            runSearch(q, near)
+        }
+    }
+
+    /** Called on the keyboard Search action: no debounce, no minimum length beyond one character. */
+    fun submitSearch(near: Pair<Double, Double>?) {
+        val q = searchQuery.trim()
+        searchJob?.cancel()
+        if (q.isEmpty()) {
+            searchState = SearchState.Idle
+            return
+        }
+        searchState = SearchState.Loading
+        searchJob = viewModelScope.launch { runSearch(q, near) }
+    }
+
+    private suspend fun runSearch(q: String, near: Pair<Double, Double>?) {
+        searchState = try {
+            val found = places.search(q, near)
+            if (found.isEmpty()) SearchState.Empty else SearchState.Results(found)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            SearchState.Unavailable
+        } catch (e: Exception) {
+            SearchState.Unavailable
+        }
+    }
+
+    fun clearSearch() {
+        searchJob?.cancel()
+        searchQuery = ""
+        searchState = SearchState.Idle
+    }
+
+    /** Places the pin on a result, fills the name only when it is still empty, and collapses the list. */
+    fun pickPlace(r: PlaceResult) {
+        searchJob?.cancel()
+        setLocation(r.lat, r.lon)
+        if (name.isBlank()) name = r.title
+        searchQuery = r.title
+        searchState = SearchState.Idle
     }
 
     fun setRadiusMeters(m: Int) {
@@ -162,3 +235,14 @@ class EditorViewModel(app: Application, private val reminderId: Long) : AndroidV
         }
     }
 }
+
+sealed interface SearchState {
+    data object Idle : SearchState
+    data object Loading : SearchState
+    data object Empty : SearchState
+    data object Unavailable : SearchState
+    data class Results(val places: List<PlaceResult>) : SearchState
+}
+
+private const val MIN_SEARCH_CHARS = 3
+private const val SEARCH_DEBOUNCE_MS = 400L

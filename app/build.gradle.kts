@@ -6,7 +6,7 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-val appVersionName = "1.0.2"
+val appVersionName = "1.0.3"
 
 val keystoreProps = Properties().apply {
     val f = File(System.getProperty("user.home"), ".android/place_reminder.keystore.properties")
@@ -24,7 +24,7 @@ android {
         applicationId = "io.github.janhorak58.placereminder"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
+        versionCode = 4
         versionName = appVersionName
     }
 

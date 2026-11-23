@@ -1,6 +1,6 @@
 # Place Reminder
 
-An Android app that reminds you when you arrive at, leave, or stay at a place. It uses geofencing, so it does not poll your location. Maps come from OpenStreetMap. No account, no tracking, and nothing leaves your phone.
+An Android app that reminds you when you arrive at, leave, or stay at a place. It uses geofencing, so it does not poll your location. Maps come from OpenStreetMap. No account and no tracking. Your location and reminders stay on your phone. The one exception is address search, which sends the text you type to your phone's system geocoder (Google on most phones).
 
 **Download:** [place-reminder.apk](https://github.com/janhorak58/place-reminder/releases/latest/download/place-reminder.apk) (all versions on the [releases page](https://github.com/janhorak58/place-reminder/releases)). Project site: https://janhorak58.github.io/place-reminder/
 
@@ -15,6 +15,7 @@ An Android app that reminds you when you arrive at, leave, or stay at a place. I
 - Heads-up alert before you arrive, useful when driving
 - Three notification levels: Silent, Normal, Alarm (full-screen, looping sound until dismissed)
 - Radius from 50 m to 50 km, set on an OpenStreetMap map
+- Search for an address or place, or tap the map to drop the pin
 - Battery-friendly: uses the system geofencing API
 
 ## Install
